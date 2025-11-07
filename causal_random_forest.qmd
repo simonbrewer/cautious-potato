@@ -1,9 +1,12 @@
 ---
 title: "Causal Random Forest"
-format: html
+format:
+  html:
+    toc: true
 html-math-method: 
   method: mathjax
-editor: source
+date: last-modified
+editor: visual
 ---
 
 ## Introduction
