@@ -89,6 +89,8 @@ $$
 \tau(x) = lm(Y_i - \hat{m}^{-i}(X_i) \sim W_i - \hat{e}^{-i}(X_i), \mbox{weights} = 1(X_i \in \square (x)))
 $$
 
+A better way of thinking about this may be that we are trying to build a random forest where the outcome is the slope of a regression line. The loss function prioritizes the *biggest difference in slope* at any split point.
+
 
 ## Example 1
 

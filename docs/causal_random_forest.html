@@ -4110,6 +4110,7 @@ E(Y_i(1) - Y_i(0)|X_i = x)
 <p><span class="math display">\[
 \tau(x) = lm(Y_i - \hat{m}^{-i}(X_i) \sim W_i - \hat{e}^{-i}(X_i), \mbox{weights} = 1(X_i \in \square (x)))
 \]</span></p>
+<p>A better way of thinking about this may be that we are trying to build a random forest where the outcome is the slope of a regression line. The loss function prioritizes the <em>biggest difference in slope</em> at any split point.</p>
 </section>
 </section>
 <section id="example-1" class="level2">
