@@ -239,6 +239,80 @@ saveGIF({
 knitr::include_graphics("test.gif", error = FALSE)
 ```
 
+Pseudo-code for the full tree here:
+
+```
+nsplit = 10
+out_df = data.frame(split = 1:nsplit,
+                    X = rep(NA, nsplit),
+                    tau_lo = rep(NA, nsplit),
+                    tau_hi = rep(NA, nsplit))
+
+data_list = list(plot_df)
+breaks = seq(-2,2,by = 0.1)
+nbreaks = length(breaks)
+
+for (i in 1:nsplit) {
+  max_dtau = max_df = max_x = max_tau1 = max_tau2 = -9999
+  for (j in 1:length(data_list)) {
+    tmp_dl = data_list[[j]]
+    print(paste(i,j))
+    tau_df = data.frame(brks = breaks, 
+                        tau1 = rep(NA, nbreaks),
+                        tau2 = rep(NA, nbreaks),
+                        dtau = rep(NA, nbreaks))
+    for (k in 1:nbreaks) {
+      
+      dat1 = tmp_dl |>
+        dplyr::filter(X < breaks[k])
+      dat2 = tmp_dl |>
+        dplyr::filter(X >= breaks[k])
+      
+      if (nrow(dat1) > 10 & nrow(dat2) > 10) {
+        mod1 = lm(Y_hat ~ W_hat, dat1)
+        tau_df$tau1[k] = coef(mod1)[2]
+        mod2 = lm(Y_hat ~ W_hat, dat2)
+        tau_df$tau2[k] = coef(mod2)[2]
+      
+        tau_df$dtau[k] = abs(tau_df$tau1[k] - tau_df$tau2[k])
+      }
+    }
+    
+    rowID = which.max(tau_df$dtau)
+    if (any(!is.na(tau_df$dtau))) {
+      if (tau_df$dtau[rowID] > max_dtau) {
+        max_tau1 = tau_df$tau1[rowID]
+        max_tau2 = tau_df$tau2[rowID]
+        max_dtau = tau_df$dtau[rowID]
+        max_x = tau_df$brks[rowID]
+        max_df = j
+      }
+      
+    }
+  }
+  print(paste(max_dtau, rowID, max_df, max_tau1, max_tau2))
+  out_df$X[i] = max_x
+  out_df$tau_lo[i] = max_tau1
+  out_df$tau_hi[i] = max_tau2
+  
+  new_dl = list()
+  for (j in 1:length(data_list)) {
+    if (j == max_df) {
+      dat1 = data_list[[j]] |>
+        dplyr::filter(X < max_x)
+      dat2 = data_list[[j]] |>
+        dplyr::filter(X >= max_x)
+      new_dl = append(new_dl, list(dat1, dat2))
+    } else {
+      new_dl = append(new_dl, list(data_list[[j]]))
+    }
+  }
+  
+  ## Reassign data_list
+  data_list = new_dl
+}
+```
+
 ## Example 2
 
 From **grf** docs
