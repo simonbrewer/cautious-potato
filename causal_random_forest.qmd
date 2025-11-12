@@ -94,29 +94,179 @@ A better way of thinking about this may be that we are trying to build a random 
 
 ## Example 1
 
+Example of fitting a causal forest with a nonlinear relationship between `X` and $\tau$:
 
 ```{r}
+library(grf)
+library(ggplot2)
+```
+
+Create some data (`X[,1]` is a confounder, `X[,2]` & `X[,3]` have non-linear impact on outcome)
+
+```{r}
+set.seed(42)
+n <- 2000
+p <- 10
+X <- matrix(rnorm(n * p), n, p)
+X_test <- matrix(0, 101, p)
+X_test[, 1] <- seq(-2, 2, length.out = 101)
+
+W <- rbinom(n, 1, 0.4 + 0.2 * (X[, 1] > 0))
+Y <- pmax(X[, 1], 0) * W + X[, 2] + pmin(X[, 3], 0) + rnorm(n)
+```
+
+Plot `X_1` and `Y`
+
+```{r}
+plot_df = data.frame(X= X[,1], W = as.factor(W), Y = Y)
+ggplot(plot_df, aes(x = X, y= Y, col = W)) +
+  geom_point() +
+  geom_smooth()
+```
+
+Fit causal forest
+
+```{r}
+tau_forest <- causal_forest(X, Y, W)
+tau_forest
+```
+
+Predict and plot
+
+```{r}
+tau_hat <- predict(tau_forest, X_test)
+plot_df = data.frame(X = rep(X_test[,1], 2),
+                     tau = c(pmax(0, X_test[, 1]), tau_hat$predictions),
+                     label = rep(c("Truth","Pred"), each = nrow(X_test)))
+ggplot(plot_df, aes(x = X, y = tau, col = label)) +
+  geom_line() +
+  theme_bw()
+
+```
+
+## Example 1b
+
+This uses the same data as before, but walks through a single split in a causal tree. 
+
+Step 1: nuisance model for treatment (the propensity model)
+
+```{r}
+forest_W <- regression_forest(X, W, tune.parameters = "all")
+W_hat <- predict(forest_W)$predictions
+```
+
+Step 2: nusiance model for outcome
+
+```{r}
+forest_Y <- regression_forest(X, Y, tune.parameters = "all")
+Y_hat <- predict(forest_Y)$predictions
+```
+
+Step 2b (optional): variable selection for forest
+```{r}
+forest_Y_varimp <- variable_importance(forest_Y)
+forest_Y_varimp
+```
+
+```{r}
+tau_forest <- causal_forest(X, Y, W,
+                            W.hat = W_hat, Y.hat = Y_hat,
+                            tune.parameters = "all")
+
+tau_hat <- predict(tau_forest, X_test)
+
+plot(X_test[, 1], tau_hat$predictions, ylim = range(tau_hat$predictions, 0, 2), xlab = "x", ylab = "tau", type = "l")
+lines(X_test[, 1], pmax(0, X_test[, 1]), col = 2, lty = 2)
+```
+
+```{r}
+library(animation)
+
+breaks = seq(-2,2,by = 0.1)
+nbreaks = length(breaks)
+tau_df = data.frame(brks = breaks, 
+                    tau1 = rep(NA, nbreaks),
+                    tau2 = rep(NA, nbreaks),
+                    dtau = rep(NA, nbreaks))
+plot_df = data.frame(X = X[,1], 
+                     W = as.factor(W), 
+                     W_hat = W_hat,
+                     Y = Y,
+                     Y_hat = Y_hat)
+plot_df$tau_hat <- predict(tau_forest)$predictions
+```
+
+```{r echo=FALSE}
+saveGIF({
+  for (i in 1:nbreaks) {
+  dat1 = plot_df |>
+    dplyr::filter(X < breaks[i])
+  mod1 = lm(Y_hat ~ W_hat, dat1)
+  tau_df$tau1[i] = coef(mod1)[2]
+  dat2 = plot_df |>
+    dplyr::filter(X >= breaks[i])
+  mod2 = lm(Y_hat ~ W_hat, dat2)
+  tau_df$tau2[i] = coef(mod2)[2]
+  
+  tau_df$dtau[i] = abs(tau_df$tau1[i] - tau_df$tau2[i])
+  
+  par(mfrow = c(2,2))
+  plot(Y_hat ~ W_hat, dat1, 
+       xlim = range(plot_df$W_hat), 
+       ylim = range(plot_df$Y_hat),
+       main = paste("tau", round(tau_df$tau1[i], 4)))
+  abline(mod1, lwd = 2, col = 2)
+  plot(Y_hat ~ W_hat, dat2, 
+       xlim = range(plot_df$W_hat), 
+       ylim = range(plot_df$Y_hat),
+       main = paste("tau", round(tau_df$tau2[i], 4)))
+  abline(mod2, lwd = 2, col = 2)
+  
+  hist(plot_df$X, main = paste("Split at X =", round(breaks[i], 1)))
+  abline(v = breaks[i], col = 2, lwd = 2)
+  
+  plot(tau_df$brks, tau_df$dtau, 
+       type = 'b', lwd = 2, col = 2,
+       ylim = c(0,30),
+       main = paste("dtau", round(tau_df$dtau[i], 4)))
+  }
+  
+}, movie.name = "test.gif", interval = 0.2, ani.width = 1000, ani.height = 1000)
+
+```
+
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("test.gif", error = FALSE)
+```
+
+## Example 2
+
+From **grf** docs
+
+> In this section, we walk through an example application of GRF. The data we are using is from Bruhn et al. (2016), which conducted an RCT in Brazil in which high schools were randomly assigned a financial education program (in settings like this it is common to randomize at the school level to avoid student-level interference). This program increased student financial proficiency on average. Other outcomes are considered in the paper, we’ll focus on the financial proficiency score here. A processed copy of this data, containing student-level data from around 17 000 students, is stored on the github repo, it extracts basic student characteristics, as well as additional baseline survey responses we use as covariates (two of these are aggregated into an index by the authors to assess student’s ability to save, and their financial autonomy).
+
+```{r}
+library(grf)
+
 data <- read.csv("./data/bruhn2016.csv")
 Y <- data$outcome
 W <- data$treatment
 school <- data$school
 X <- data[-(1:3)]
+```
 
-# Around 30% have one or more missing covariates, the missingness pattern doesn't seem
-# to vary systematically between the treated and controls, so we'll keep them in the analysis
-# since GRF supports splitting on X's with missing values.
+Around 30% have one or more missing covariates, the missingness pattern doesn't seem to vary systematically between the treated and controls, so we'll keep them in the analysis since GRF supports splitting on X's with missing values.
+
+```{r}
 sum(!complete.cases(X)) / nrow(X)
-#> [1] 0.29
+```
+
+```{r}
 t.test(W ~ !complete.cases(X))
-#> 
-#>  Welch Two Sample t-test
-#> 
-#> data:  W by !complete.cases(X)
-#> t = -0.4, df = 9490, p-value = 0.7
-#> alternative hypothesis: true difference in means between group FALSE and group TRUE is not equal to 0
-#> 95 percent confidence interval:
-#>  -0.020  0.013
-#> sample estimates:
-#> mean in group FALSE  mean in group TRUE 
-#>                0.51                0.52
+```
+
+Fitting causal forest
+
+```{r}
+cf <- causal_forest(X, Y, W, W.hat = 0.5, clusters = school)
 ```
