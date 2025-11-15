@@ -110,15 +110,19 @@ These biases can be addressed through orthoganalization (the FWL type approach),
 
 ### Cross-ftting
 
-Cross-fitting attempts to limit these biases in DML by fitting the model to one subset of data, and then obtaining the plug-in estimates for the other subset. This ensures that the prediction for any given data point is not influenced by the model fit on that same data point. This probably looks a lot like cross-validationm but it is used in the fitting stage, not evaluation
+Cross-fitting attempts to limit these biases in DML by splitting the data into folds. The model is fit to one fold of data, and then plug-in estimates are obtained for the other fold This ensures that the prediction for any given data point is not influenced by the model fit on that same data point. This probably looks a lot like cross-validationm but it is used in the fitting stage, not evaluation. Cross-fitting improves estimation of standard errors and enables valid inference
 
 ![Cross-fitting workflow](images/crossfitting.png)
 
 ### Honest trees
 
+This basically means that any tree has to use a different set of points for constructing the splits and for predicting the labels. This is distinguished from cross-fitting by applying to individual trees (not the whole forest model, as in cross-fitting). 
+
+In general, data are split into folds to estimate the models, then honest trees are built within the forest. The honest approach maps particularly well to the RF algorithm, as the bootstrapping of samples ensures there are always a split into in-bag and out-of-bag samples for each tree (and a different split for each tree).
+
 ## Non-constant treatment effects
 
-For In the original equation, $\tau$ is assumed to be a constant factor across all individuals. To relax this, they use the idea of subgroups within the data set, each of which has it's own regression, giving a value of $\tau$ for each group (\$\tau here is still the coefficient of a linear model based on the centered outcome and treatment). The equation now becomes:
+For In the original equation, $\tau$ is assumed to be a constant factor across all individuals. To relax this, they use the idea of subgroups within the data set, each of which has it's own regression, giving a value of $\tau$ for each group ($\tau$ here is just the coefficient of a linear model based on the centered outcome and treatment). The equation now becomes:
 
 $$
 Y_i = \tau(X_i) W_i + f(X_i) + \epsilon_i
@@ -137,6 +141,8 @@ $$
 $$
 
 A better way of thinking about this may be that we are trying to build a random forest where the outcome is the slope of a regression line. The loss function prioritizes the *biggest difference in slope* at any split point.
+
+As an aside: Athey, Tibshirani and Wager extend this idea to generalized random forests. In these, the splits are formed simply by maximizing the "heterogeneity in some arbitrary parameter given as the solution to [an] equation". The **grf** package includes functions for probability, quantile and survival forests (for example).
 
 ## CF Algorithm
 
