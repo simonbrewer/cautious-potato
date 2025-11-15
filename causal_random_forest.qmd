@@ -91,6 +91,25 @@ $$
 
 A better way of thinking about this may be that we are trying to build a random forest where the outcome is the slope of a regression line. The loss function prioritizes the *biggest difference in slope* at any split point.
 
+## CF Algorithm
+
+1. Fit first models (nuisance and propensity) using any standard machine learning algorithm (cross fit: use different subsets of data for the two models)
+2. Use first stage models to estimate values for the outcome ($m(x)$) and treatment ($e(x)$)
+3. Calculate outcome residuals ($Y' = Y_i - m(x)$) and treatment residuals ($T' = T_i - e(x)$)
+4. Fit second stage model (causal forest)
+  i. Bootstrap data into in-bag (IB) and out-of-bag (OOB) sets
+  ii. Using the IB set, for each feature ($X_j$):
+    a. Iterate across values of $X_j$ to partition the OOB data into two sets ($L$ and $R$)
+    b. Test for imbalance (hyperparameter: 25-75% is maximum imbalance by default): skip if imbalance is greater than this
+    c. Fit the following model in each of the two partitions:
+      1. Left partition  ($L$): $Y'_L = \tau_L T'_L + e$
+      2. Right partition ($R$): $Y'_R = \tau_R T'_R + e$
+    d. Calculate difference in treatment effect $\delta \tau = |\tau_L - \tau_R|$
+    e. Repeat for all $j$ features to find feature (and value) that maximizes $\delta \tau$
+  iii. make new data sets for both IB and OOB based on this split
+  iv. Repeat from ii. All subsequent steps will be based on $\gt 1$ data subsets, so requires testing splits of $X_j$ across all existing partitions
+  
+
 
 ## Example 1
 
