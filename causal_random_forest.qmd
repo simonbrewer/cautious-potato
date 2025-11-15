@@ -44,7 +44,7 @@ $$ Where
 
 We can't do anything about assumptions 1 and 2 as they are necessary to identify the model. But assumptions 3 and 4 relate to the model used and can be questioned.
 
-### Non-linear effects
+## Non-linear effects
 
 For assumption 3, we can relax this through a standard semi-parametric approach:
 
@@ -54,10 +54,42 @@ $$
 
 Here, the baseline outcome for individual $i$ is some unknown function of $X_i$, which can be complex. The treatment is still constant and shifts the baseline estimate by $\tau$.
 
-The question is then how to define `f()` given that it is unknown. To do so, this takes advantage of the residual-on-residual regression (the Frisch-Waugh-Lovell approach). Robinson (1988) showed that this can be used with semi-parametric models. In **grf** terminology, we define two new objects:
+The question is then how to define `f()` given that it is unknown. To do so, this takes advantage of the double machine learning, itself based on the Frisch-Waugh-Lovell theorem.
 
--   The propensity score: $e(x) = E(W_i|X_i=x)$
+### Frisch-Waugh-Lovell theorem
+
+This basically states that any regression with a confounder can be replaced with a regression based on residuals. For causal analysis, we want to estimate $Y_i = \tau W_i + \beta X_i + \epsilon_i$. $\tau$ can be obtained in the following steps:
+
+1. Estimate the conditional mean equation, and residuals based on this:
+
+$$
+E(Y_i|X_i=x) = \hat{Y}_i \sim \beta_Y X_i; \\  Y_i'= Y_i - \hat{Y}_i
+$$
+
+2. Estimate the propensity equation, and residuals based on this:
+
+$$
+E(W_i|X_i=x) = \hat{W}_i \sim \beta_W X_i; \\  W_i'= W_i - \hat{W}_i
+$$
+
+3.  Estimate the causal effect by regressing the residuals:
+
+$$
+Y_i' \sim \tau W_i' 
+$$
+
+In short, this works because the first tow models remove all variation in $Y$ and $W$ related to the confounder. Any remaining variance explained by $T'$ is then causal. 
+
+This workflow outlines the steps (from http://medium.com/@med.hmamouch99/double-machine-learning-for-causal-inference-a-practical-guide-5d85b77aa586)
+
+![Frisch-Waugh-Lovell workflow](images/fwl.png)
+
+### Double-machine learning
+
+Robinson first showed that this can be used with semi-parametric models in 1988. In this paper, the FWL equations were modified to include semi-parametric functions of $X$, $f(X)$:
+
 -   The conditional mean of $Y$: $m(x) = E(Y_i|X_i=x) = f(x) + \tau e(x)$
+-   The propensity score: $e(x) = E(W_i|X_i=x)$
 
 This can then be rewritten as:
 
@@ -67,17 +99,32 @@ $$
 
 Robinson describes this as 'centering': plug in estimates of $m(x)$ and $e(x)$ are obtained, $Y_i$ and $W_i$ are centered,m then the residuals are regressed together.
 
-In standard residual-on-residual approaches, we assume that the estimates of $m(x)$ and $e(x)$ are obtained through parametric means (e.g. OLS regression). These are replaced by machine learning models in double machine learning (DML) approaches, including causal RFs. Note that these plug-in estimates are obtained using 'cross-fitting'. In this, the prediction of, for example, the outcome $m(x)$ based on the confounders $X_i$ for individual $i$ is made with a model trained on all observations *except* $i$. This avoids bias due to the (different) regularization strategies employed by the two models.
+This was further extended by Chernozhukov in 2018. Essentially, to get to the final stage model, all we need are plug-in estimates of the outcome conditional on $X_i$, and the treatment assignment conditional on $X_i$. Chernozhukov demonstrated that, under certain conditions, these plug-in estimates can be obtained from any predictive model, including standard machine learning approaches (e.g. SVM, RF, XGBoost). 
 
-### Non-constant treatment effects
+The conditions to be met involve dealing with two types of bias:
 
-In the original equation, $\tau$ is assumed to be a constant factor across all individuals. To relax this, they use the idea of subgroups within the data set, each of which has it's own regression, giving a value of $\tau$ for each group (\$\tau here is still the coefficient of a linear model based on the centered outcome and treatment). The equation now becomes:
+- Regularization bias
+- Overfitting bias
+
+These biases can be addressed through orthoganalization (the FWL type approach), cross-fitting and the use of honest trees. 
+
+### Cross-ftting
+
+Cross-fitting attempts to limit these biases in DML by fitting the model to one subset of data, and then obtaining the plug-in estimates for the other subset. This ensures that the prediction for any given data point is not influenced by the model fit on that same data point. This probably looks a lot like cross-validationm but it is used in the fitting stage, not evaluation
+
+![Cross-fitting workflow](images/crossfitting.png)
+
+### Honest trees
+
+## Non-constant treatment effects
+
+For In the original equation, $\tau$ is assumed to be a constant factor across all individuals. To relax this, they use the idea of subgroups within the data set, each of which has it's own regression, giving a value of $\tau$ for each group (\$\tau here is still the coefficient of a linear model based on the centered outcome and treatment). The equation now becomes:
 
 $$
 Y_i = \tau(X_i) W_i + f(X_i) + \epsilon_i
 $$
 
-where $\tau (X_i)$ is the *conditional* average treatment effect for a given set of values of $X_i$: 
+where $\tau (X_i)$ is the *conditional* average treatment effect for a given set of values of $X_i$:
 
 $$
 E(Y_i(1) - Y_i(0)|X_i = x)
@@ -93,23 +140,21 @@ A better way of thinking about this may be that we are trying to build a random 
 
 ## CF Algorithm
 
-1. Fit first models (nuisance and propensity) using any standard machine learning algorithm (cross fit: use different subsets of data for the two models)
-2. Use first stage models to estimate values for the outcome ($m(x)$) and treatment ($e(x)$)
-3. Calculate outcome residuals ($Y' = Y_i - m(x)$) and treatment residuals ($T' = T_i - e(x)$)
-4. Fit second stage model (causal forest)
-  i. Bootstrap data into in-bag (IB) and out-of-bag (OOB) sets
-  ii. Using the IB set, for each feature ($X_j$):
-    a. Iterate across values of $X_j$ to partition the OOB data into two sets ($L$ and $R$)
-    b. Test for imbalance (hyperparameter: 25-75% is maximum imbalance by default): skip if imbalance is greater than this
-    c. Fit the following model in each of the two partitions:
-      1. Left partition  ($L$): $Y'_L = \tau_L T'_L + e$
-      2. Right partition ($R$): $Y'_R = \tau_R T'_R + e$
-    d. Calculate difference in treatment effect $\delta \tau = |\tau_L - \tau_R|$
-    e. Repeat for all $j$ features to find feature (and value) that maximizes $\delta \tau$
-  iii. make new data sets for both IB and OOB based on this split
-  iv. Repeat from ii. All subsequent steps will be based on $\gt 1$ data subsets, so requires testing splits of $X_j$ across all existing partitions
-  
+1.  Fit first models (nuisance and propensity) using any standard machine learning algorithm (cross fit: use different subsets of data for the two models)
+2.  Use first stage models to estimate values for the outcome ($m(x)$) and treatment ($e(x)$)
+3.  Calculate outcome residuals ($Y' = Y_i - m(x)$) and treatment residuals ($T' = T_i - e(x)$)
+4.  Fit second stage model (causal forest)
 
+<!-- -->
+
+i.  Bootstrap data into in-bag (IB) and out-of-bag (OOB) sets
+ii. Using the IB set, for each feature ($X_j$): a. Iterate across values of $X_j$ to partition the OOB data into two sets ($L$ and $R$) b. Test for imbalance (hyperparameter: 25-75% is maximum imbalance by default): skip if imbalance is greater than this c. Fit the following model in each of the two partitions:
+    1.  Left partition ($L$): $Y'_L = \tau_L T'_L + e$
+    2.  Right partition ($R$): $Y'_R = \tau_R T'_R + e$
+        d.  Calculate difference in treatment effect $\delta \tau = |\tau_L - \tau_R|$
+        e.  Repeat for all $j$ features to find feature (and value) that maximizes $\delta \tau$
+iii. make new data sets for both IB and OOB based on this split
+iv. Repeat from ii. All subsequent steps will be based on $\gt 1$ data subsets, so requires testing splits of $X_j$ across all existing partitions
 
 ## Example 1
 
@@ -165,7 +210,7 @@ ggplot(plot_df, aes(x = X, y = tau, col = label)) +
 
 ## Example 1b
 
-This uses the same data as before, but walks through a single split in a causal tree. 
+This uses the same data as before, but walks through a single split in a causal tree.
 
 Step 1: nuisance model for treatment (the propensity model)
 
@@ -182,6 +227,7 @@ Y_hat <- predict(forest_Y)$predictions
 ```
 
 Step 2b (optional): variable selection for forest
+
 ```{r}
 forest_Y_varimp <- variable_importance(forest_Y)
 forest_Y_varimp
@@ -260,7 +306,7 @@ knitr::include_graphics("test.gif", error = FALSE)
 
 Pseudo-code for the full tree here:
 
-```
+```         
 nsplit = 10
 out_df = data.frame(split = 1:nsplit,
                     X = rep(NA, nsplit),
