@@ -1,9 +1,10 @@
 ## GRF with treatment in features (second stage)
+## Normally distributed W
 
 library(grf)
 library(hstats)
 
-# set.seed(42)
+set.seed(42)
 n <- 10000 ## n samples
 p <- 4 ## p features
 
@@ -13,22 +14,24 @@ X <- matrix(rnorm(n * p, sd = 0.1), n, p)
 
 ## Needed for predictions
 X_test0 <- matrix(0, 101, p)
-X_test1 <- cbind(X_test0, seq(0, 1, length.out = 101))
+X_test1 <- cbind(X_test0, seq(-3, 3, length.out = 101))
 # X_test[, 1] <- seq(-2, 2, length.out = 101)
 
 ## Make random treatment (cont)
 W <- rnorm(n, mean = 0)
-W <- runif(n)
+# W <- (W - min(W)) / (max(W) - min(W))
+# W <- runif(n)
 
 ## Make outcome: nonlinear treatment effect only
 w_eff <- 2
-Y <- pmax(W, 0.5) * w_eff
+Y <- pmax(W, 0) * w_eff
+
 # Y <- W * w_eff
 # Y <- 0
 
 ## Noise on Y
 Y_e <- rnorm(n, sd = 0.1)
-Y <- Y + Y_e
+Y <- Y + Y_e 
 
 ## Plot treatment 'effect'
 plot(W, Y)
@@ -77,14 +80,16 @@ par(mai = c(0.7, 2, 0.2, 0.2))
 barplot(imp, horiz = TRUE, las = 1, col = "orange")
 
 ## pdp
-plot(partial_dep(f_tau1, "W", X = X_W))
+plot(partial_dep(f_tau1, "W", X = X_W)) +
+  scale_y_continuous(limits = c(0, 2)) + 
+  theme_minimal()
 
 ## 
 tau_hat = predict(f_tau1)$predictions
 
 ## Reconstruct
 tau_hat = predict(f_tau1, X_test1)$predictions
-y_hat = tau_hat * X_test1[,5]
+y_hat = tau_hat * X_test1[,5] 
 
 ## Plot
 plot(W, Y)
