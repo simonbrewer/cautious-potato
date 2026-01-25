@@ -4,28 +4,30 @@ library(grf)
 library(hstats)
 
 # set.seed(42)
-n <- 2000 ## n samples
+n <- 10000 ## n samples
 p <- 4 ## p features
 
 ## Make random features
-X <- matrix(rnorm(n * p), n, p)
+X <- matrix(rnorm(n * p, sd = 0.1), n, p)
 # X <- matrix(0, n, p)
 
 ## Needed for predictions
 X_test0 <- matrix(0, 101, p)
-X_test1 <- cbind(X_test0, seq(-3, 3, length.out = 101))
+X_test1 <- cbind(X_test0, seq(0, 1, length.out = 101))
 # X_test[, 1] <- seq(-2, 2, length.out = 101)
 
 ## Make random treatment (cont)
 W <- rnorm(n, mean = 0)
+W <- runif(n)
 
 ## Make outcome: nonlinear treatment effect only
 w_eff <- 2
-Y <- pmax(W, 0) * w_eff
+Y <- pmax(W, 0.5) * w_eff
 # Y <- W * w_eff
+# Y <- 0
 
 ## Noise on Y
-Y_e <- rnorm(n, sd = 0.25)
+Y_e <- rnorm(n, sd = 0.1)
 Y <- Y + Y_e
 
 ## Plot treatment 'effect'
@@ -57,10 +59,12 @@ barplot(imp, horiz = TRUE, las = 1, col = "orange")
 plot(partial_dep(f_tau0, "X3", X = X))
 
 ## ---------------------------------------------
-## Fit causal forest (T in X)
+## Fit causal forest (W in X)
 ## ---------------------------------------------
 X_W = cbind(X, W)
-colnames(X_W) <- c("X0", "X1", "X2", "X3", "T")
+colnames(X_W) <- c("X0", "X1", "X2", "X3", "W")
+# X_W = as.matrix(W)
+# colnames(X_W) <- c("W")
 
 f_tau1 <- causal_forest(X_W, Y, W,
                         W.hat = W_hat, Y.hat = Y_hat)
@@ -73,4 +77,21 @@ par(mai = c(0.7, 2, 0.2, 0.2))
 barplot(imp, horiz = TRUE, las = 1, col = "orange")
 
 ## pdp
-plot(partial_dep(f_tau1, "T", X = X_W))
+plot(partial_dep(f_tau1, "W", X = X_W))
+
+## 
+tau_hat = predict(f_tau1)$predictions
+
+## Reconstruct
+tau_hat = predict(f_tau1, X_test1)$predictions
+y_hat = tau_hat * X_test1[,5]
+
+## Plot
+plot(W, Y)
+lines(X_test1[,5], y_hat, lwd = 3, col = "orange")
+
+# high_effect = tau_hat > median (tau_hat)
+# ate_high = average_treatment_effect(f_tau1, subset = high_effect)
+# ate_high
+# ate_low = average_treatment_effect(f_tau1, subset = !high_effect)
+# ate_low
