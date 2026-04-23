@@ -14,9 +14,9 @@ X = matrix(rnorm((n_samples * n_X)), ncol = n_X)
 T = rnorm(n_samples)
 
 ## ---------------------------------------------
-## Make outcome: nonlinear treatment effect only
+## Make outcome: linear treatment effect only
 w_eff = 2
-y = w_eff * T * (T > 0)
+y = w_eff * T # * (T > 0)
 
 ## Noise on Y
 y_e = rnorm(n_samples, 0.0, 0.1)
@@ -30,7 +30,8 @@ plot(T, y)
 
 w_eff = 2
 x_eff = 1.5
-y = w_eff * T * (T > 0) + X[,1] * x_eff
+# y = w_eff * T * (T > 0) + X[,1] * x_eff
+y = w_eff * T + X[,1] * x_eff
 
 
 ## Noise on Y
@@ -75,7 +76,6 @@ derivs2 <- derivatives(mod_final_gam2, type = "central")
 
 # Plot the derivatives
 draw(derivs2)
-
 
 plot_df = data.frame(model = c(derivs1$.smooth, derivs2$.smooth),
                      T = c(derivs1$e_t, derivs2$T),
