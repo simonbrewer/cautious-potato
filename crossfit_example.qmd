@@ -1,0 +1,99 @@
+---
+title: "Crossfitting example"
+format: html
+editor: source
+---
+
+## Introduction
+
+Simple crossfitting example
+
+```{r}
+library(caret)
+library(sjPlot)
+```
+
+Any parameters go here:
+- `k` = number of folds
+
+```{r}
+k_folds = 5
+```
+
+
+# One confounder, one treatment
+
+## Data
+
+```{r}
+n_samples = 10000
+
+x1 = rnorm(n_samples, mean = 0, sd = 1)
+
+x1_t = 2
+
+t = x1 * x1_t + rnorm(n_samples, 0, 0.5)
+
+plot(x1, t)
+
+x1_y = 1.5
+t_y = 2.5
+
+y = x1 * x1_y + t * t_y + rnorm(n_samples, 0, 0.25)
+
+plot(x1, y)
+plot(t, y)
+
+df = data.frame(x1, t, y)
+```
+
+## Classic causal model
+
+```{r}
+mod = lm(y ~ t + x1, df)
+tab_model(mod)
+```
+
+## FWL method with cross-fitting
+
+### Nuisance model 1: Propensity
+
+```{r}
+folds <- createFolds(df$y, k = k_folds)
+
+df$t_hat = NA
+
+for (k in 1:k_folds) {
+  df_train = df[-folds[[k]], ]
+  df_test = df[folds[[k]], ]
+  mod = lm(t ~ x1, df_train)
+  df$t_hat[folds[[k]]] = predict(mod, newdata = df_test)
+}
+
+df$t_res = df$t - df$t_hat
+```
+
+### Nuisance model 2: Outcome
+
+```{r}
+folds <- createFolds(df$y, k = k_folds)
+
+df$y_hat = NA
+
+for (k in 1:k_folds) {
+  df_train = df[-folds[[k]], ]
+  df_test = df[folds[[k]], ]
+  mod = lm(y ~ x1, df_train)
+  df$y_hat[folds[[k]]] = predict(mod, newdata = df_test)
+}
+
+df$y_res = df$y - df$y_hat
+```
+
+### Final model
+
+```{r}
+mod_final = lm(y_res ~ t_res, df)
+tab_model(mod_final)
+```
+
